@@ -130,6 +130,9 @@ for us, value in realtracks.items():
         print('%s:' % name)
         print('{}\n'.format('\n'.join(tracks)))
 
+if not realplaylists and not realtracks:
+    print('\nNo change')
+
 data['playlists'] = oldplaylists
 if __name__ == '__main__':
     with open(sys.path[0] + '/data.json', 'w') as f:
