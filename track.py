@@ -16,16 +16,20 @@ else:
 
 def runUser(us):
     print('Starting user %s' % us)
-    try:
-        user = sp.getUser(us)
-    except:
-        print('Error with user %s: %s' % (us, sys.exc_info()[1]), file=sys.stderr)
-        return
-    try:
-        playlists = sp.getUserPlaylists(user)
-    except:
-        print('Error with user %s playlists: %s' % (us, sys.exc_info()[1]), file=sys.stderr)
-        return
+    while True:
+        try:
+            user = sp.getUser(us)
+        except:
+            print('Error with user %s: %s' % (us, sys.exc_info()[1]), file=sys.stderr)
+            print('Retrying...', file=sys.stderr)
+            continue
+        try:
+            playlists = sp.getUserPlaylists(user)
+        except:
+            print('Error with user %s playlists: %s' % (us, sys.exc_info()[1]), file=sys.stderr)
+            print('Retrying...', file=sys.stderr)
+        else:
+            break
 
     print('Finished pulling playlists for user %s' % us)
     newuserplaylists = set(playlist['name'] for playlist in playlists)
@@ -43,13 +47,15 @@ def runUser(us):
     print('Finished pulling tracks for user %s' % us)
 
 def addTrackUris(playlist, usertemptracks):
-    try:
-        tracks = sp.getTracksFromItem(playlist)
-    except spotifywebapi.SpotifyError as err:
-        print(err)
-        return
-
-    usertemptracks[playlist['name']] = tracks
+    while True:
+        try:
+            tracks = sp.getTracksFromItem(playlist)
+        except spotifywebapi.SpotifyError as err:
+            print(err, file=sys.stderr)
+            print('Retrying addTrackUris for playlist %s' % playlist['name'], file=sys.stderr)
+        else:
+            usertemptracks[playlist['name']] = tracks
+            return
 
 if __name__ == '__main__':
     with open(sys.path[0] + '/data.json', 'r') as f:
