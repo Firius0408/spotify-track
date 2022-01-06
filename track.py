@@ -32,12 +32,26 @@ def runUser(us):
             break
 
     print('Finished pulling playlists for user %s' % us)
-    newuserplaylists = set(playlist['name'] for playlist in playlists)
-    tempplaylists[us] = newuserplaylists
+    playlist_snapshot_ids = {playlist['name']: playlist['snapshot_id'] for playlist in playlists}
+    oldplaylist_snapshot_ids = oldplaylists[us]
+    updated_playlists = []
+    new_playlists = []
+    if isinstance(oldplaylist_snapshot_ids, dict):
+        for name, snapshot_id in playlist_snapshot_ids.items():
+            if name in oldplaylist_snapshot_ids:
+                if snapshot_id != oldplaylist_snapshot_ids[name]:
+                    updated_playlists.append(name)
+            else:
+                new_playlists.append(name)
+    else:
+        updated_playlists = playlist_snapshot_ids.keys()
+
+    data['playlists'][us] = playlist_snapshot_ids
+    tempplaylists[us] = new_playlists
     futures = []
     usertemptracks = {}
     for playlist in playlists:
-        if "Top Songs " in playlist['name'] or playlist['owner']['id'] != us:
+        if playlist['name'] not in updated_playlists or "Top Songs " in playlist['name'] or playlist['owner']['id'] != us:
             continue
 
         futures.append(executor.submit(addTrackUris, playlist, usertemptracks))
@@ -109,11 +123,8 @@ if __name__ == '__main__':
     executor.shutdown()
     realplaylists = {}
     for us, newuserplaylists in tempplaylists.items():
-        olduserplaylists = set(oldplaylists[us])
-        playlistdiff = newuserplaylists - olduserplaylists
-        if playlistdiff:
-            realplaylists[us] = playlistdiff
-            oldplaylists[us] = list(newuserplaylists)
+        if newuserplaylists:
+            realplaylists[us] = newuserplaylists
 
     realtracks = {}
     for us, value in temptracks.items():
@@ -140,7 +151,6 @@ if __name__ == '__main__':
     if not realplaylists and not realtracks:
         print('\nNo change')
 
-    data['playlists'] = oldplaylists
     if __name__ == '__main__':
         with open(sys.path[0] + '/data.json', 'w') as f:
             json.dump(data, f, indent=4, separators=(',', ': '))
