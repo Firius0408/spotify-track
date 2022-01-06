@@ -64,87 +64,88 @@ else:
     with open('./data.json', 'r') as f:
         data = json.load(f)
 
-print('Starting at %s ' % datetime.datetime.today().strftime("%Y-%m-%d %H:%M:%S"))
-try:
-    offset = datetime.datetime.fromisoformat(data['timestamp'])
-except KeyError:
-    print('No timestamp found in data.json, setting offset and exiting...', file=sys.stderr)
+if __name__ == '__main__':
+    print('Starting at %s ' % datetime.datetime.today().strftime("%Y-%m-%d %H:%M:%S"))
+    try:
+        offset = datetime.datetime.fromisoformat(data['timestamp'])
+    except KeyError:
+        print('No timestamp found in data.json, setting offset and exiting...', file=sys.stderr)
+        data['timestamp'] = datetime.datetime.utcnow().isoformat()
+        if __name__ == '__main__':
+            with open(sys.path[0] + '/data.json', 'w') as f:
+                json.dump(data, f, indent=4, separators=(',', ': '))
+        else:
+            with open('./data.json', 'w') as f:
+                json.dump(data, f, indent=4, separators=(',', ': '))
+        exit(1)
+    except ValueError:
+        print('Incorrectly formatted timestamp found in data.json, exiting...', file=sys.stderr)
+        exit(1)
+
+    print('Using UTC offset %s' % offset.strftime("%Y-%m-%d %H:%M:%S"))
     data['timestamp'] = datetime.datetime.utcnow().isoformat()
+    try:
+        users = data['users']
+    except KeyError:
+        print("Could not find 'users' in data.json, exiting...", file=sys.stderr)
+        exit(1)
+
+    try:
+        oldplaylists = data['playlists']
+    except KeyError:
+        print("Could not find 'playlists' in data.json, exiting...", file=sys.stderr)
+        exit(1)
+
+    sp = spotifywebapi.Spotify(CLIENT_ID, CLIENT_SECRET)
+    executor = ThreadPoolExecutor()
+    futures = []
+    tempplaylists = {}
+    temptracks = {}
+    for user in users:
+        futures.append(executor.submit(runUser, user))
+
+    wait(futures)
+    print('Finished pulling data')
+    executor.shutdown()
+    realplaylists = {}
+    for us, newuserplaylists in tempplaylists.items():
+        olduserplaylists = set(oldplaylists[us])
+        playlistdiff = newuserplaylists - olduserplaylists
+        if playlistdiff:
+            realplaylists[us] = playlistdiff
+            oldplaylists[us] = list(newuserplaylists)
+
+    realtracks = {}
+    for us, value in temptracks.items():
+        for name, tracks in value.items():
+            tracknames = [track['track']['name'] for track in tracks if datetime.datetime.strptime(track['added_at'], '%Y-%m-%dT%H:%M:%SZ') > offset and track['track'] is not None and track['track']['id'] is not None]
+            if tracknames:
+                if us not in realtracks.keys():
+                    realtracks[us] = {}
+                if name not in realtracks[us].keys():
+                    realtracks[us][name] = []
+                realtracks[us][name] = tracknames
+
+    for us, value in realplaylists.items():
+        print('\n')
+        for playlist in value:
+            print('New playlist {} detected for user {}'.format(playlist, us))
+
+    for us, value in realtracks.items():
+        print('\n%s:\n' % us)
+        for name, tracks in value.items():
+            print('%s:' % name)
+            print('{}\n'.format('\n'.join(tracks)))
+
+    if not realplaylists and not realtracks:
+        print('\nNo change')
+
+    data['playlists'] = oldplaylists
     if __name__ == '__main__':
         with open(sys.path[0] + '/data.json', 'w') as f:
             json.dump(data, f, indent=4, separators=(',', ': '))
     else:
         with open('./data.json', 'w') as f:
             json.dump(data, f, indent=4, separators=(',', ': '))
-    exit(1)
-except ValueError:
-    print('Incorrectly formatted timestamp found in data.json, exiting...', file=sys.stderr)
-    exit(1)
 
-print('Using UTC offset %s' % offset.strftime("%Y-%m-%d %H:%M:%S"))
-data['timestamp'] = datetime.datetime.utcnow().isoformat()
-try:
-    users = data['users']
-except KeyError:
-    print("Could not find 'users' in data.json, exiting...", file=sys.stderr)
-    exit(1)
-
-try:
-    oldplaylists = data['playlists']
-except KeyError:
-    print("Could not find 'playlists' in data.json, exiting...", file=sys.stderr)
-    exit(1)
-
-sp = spotifywebapi.Spotify(CLIENT_ID, CLIENT_SECRET)
-executor = ThreadPoolExecutor()
-futures = []
-tempplaylists = {}
-temptracks = {}
-for user in users:
-    futures.append(executor.submit(runUser, user))
-
-wait(futures)
-print('Finished pulling data')
-executor.shutdown()
-realplaylists = {}
-for us, newuserplaylists in tempplaylists.items():
-    olduserplaylists = set(oldplaylists[us])
-    playlistdiff = newuserplaylists - olduserplaylists
-    if playlistdiff:
-        realplaylists[us] = playlistdiff
-        oldplaylists[us] = list(newuserplaylists)
-
-realtracks = {}
-for us, value in temptracks.items():
-    for name, tracks in value.items():
-        tracknames = [track['track']['name'] for track in tracks if datetime.datetime.strptime(track['added_at'], '%Y-%m-%dT%H:%M:%SZ') > offset and track['track'] is not None and track['track']['id'] is not None]
-        if tracknames:
-            if us not in realtracks.keys():
-                realtracks[us] = {}
-            if name not in realtracks[us].keys():
-                realtracks[us][name] = []
-            realtracks[us][name] = tracknames
-
-for us, value in realplaylists.items():
-    print('\n')
-    for playlist in value:
-        print('New playlist {} detected for user {}'.format(playlist, us))
-
-for us, value in realtracks.items():
-    print('\n%s:\n' % us)
-    for name, tracks in value.items():
-        print('%s:' % name)
-        print('{}\n'.format('\n'.join(tracks)))
-
-if not realplaylists and not realtracks:
-    print('\nNo change')
-
-data['playlists'] = oldplaylists
-if __name__ == '__main__':
-    with open(sys.path[0] + '/data.json', 'w') as f:
-        json.dump(data, f, indent=4, separators=(',', ': '))
-else:
-    with open('./data.json', 'w') as f:
-        json.dump(data, f, indent=4, separators=(',', ': '))
-
-print('\nFinished at %s\n' % datetime.datetime.today().strftime("%Y-%m-%d %H:%M:%S"))
+    print('\nFinished at %s\n' % datetime.datetime.today().strftime("%Y-%m-%d %H:%M:%S"))
