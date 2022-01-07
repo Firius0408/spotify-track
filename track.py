@@ -43,6 +43,7 @@ def runUser(us):
                     updated_playlists.append(name)
             else:
                 new_playlists.append(name)
+                updated_playlists.append(name)
     else:
         updated_playlists = playlist_snapshot_ids.keys()
 
